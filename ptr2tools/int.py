@@ -33,8 +33,8 @@ class IntFileChunk:
     """
     def __init__(self, data: bytes):
         self.header: IntFileHeader = IntFileHeader(data[:20])
-        self.info_data: bytes = self.header[self.header.info_offset:self.header.info_offset+self.header.contents_offset]
-        self.contents_data: bytes = self.header[self.header.info_offset+self.header.contents_offset:]
+        self.info_data: bytes = data[self.header.info_offset:self.header.info_offset+self.header.contents_offset]
+        self.contents_data: bytes = data[self.header.info_offset+self.header.contents_offset:]
 
 
 class IntFile:
