@@ -9,12 +9,10 @@ class IntResourceType(IntEnum):
     tm0 = 1
     sounds = 2
     stage = 3
-    hat_color_base = 4
-
-    # stupid hack because I do not know what 5-7 types are
-    unknown_5 = 5
-    unknown_6 = 6
-    unknown_7 = 7
+    red_hat = 4
+    blue_hat = 5
+    pink_hat = 6
+    yellow_hat = 7
 
 
 class IntFileHeader:
@@ -23,18 +21,10 @@ class IntFileHeader:
     """
     def __init__(self, data: bytes):
         self.file_count: int = int.from_bytes(bytes=data[:4], byteorder="little")
-        try:
-            self.resource_type: IntResourceType = IntResourceType(int.from_bytes(bytes=data[4:8], byteorder="little"))
-        except Exception as exception:
-            print(data)
-            raise exception
-        self.fn_table_offset: int = int.from_bytes(bytes=data[8:12], byteorder="little")
-        self.fn_table_size: int = int.from_bytes(bytes=data[12:16], byteorder="little")
-        self.lzss_section_size: int = int.from_bytes(bytes=data[16:20], byteorder="little")
-        self.unk: List[int] = [
-            int.from_bytes(bytes=data[20:24], byteorder="little"),
-            int.from_bytes(bytes=data[24:28], byteorder="little"),
-        ]
+        self.resource_type: IntResourceType = IntResourceType(int.from_bytes(bytes=data[4:8], byteorder="little"))
+        self.info_offset: int = int.from_bytes(bytes=data[8:12], byteorder="little")
+        self.contents_offset: int = int.from_bytes(bytes=data[12:16], byteorder="little")
+        self.compressed_size: int = int.from_bytes(bytes=data[16:20], byteorder="little")
 
 
 class IntFileChunk:
@@ -42,7 +32,9 @@ class IntFileChunk:
     Represents a single chunk in an .INT file.
     """
     def __init__(self, data: bytes):
-        self.header: IntFileHeader = IntFileHeader(data[:28])
+        self.header: IntFileHeader = IntFileHeader(data[:20])
+        self.info_data: bytes = self.header[self.header.info_offset:self.header.info_offset+self.header.contents_offset]
+        self.contents_data: bytes = self.header[self.header.info_offset+self.header.contents_offset:]
 
 
 class IntFile:
