@@ -1,5 +1,6 @@
 from enum import IntEnum
-from typing import List
+from pathlib import Path
+from typing import List, Dict
 from dataclasses import dataclass
 
 chunk_splitter = int.to_bytes(0x44332211, 4, "little")
@@ -16,6 +17,17 @@ class IntResourceType(IntEnum):
     blue_hat = 5
     pink_hat = 6
     yellow_hat = 7
+
+
+resource_type_to_path: Dict[IntResourceType, str] = {
+    IntResourceType.tm0: "Textures",
+    IntResourceType.sounds: "Sounds",
+    IntResourceType.stage: "Props",
+    IntResourceType.red_hat: "Hats/Red",
+    IntResourceType.blue_hat: "Hats/Blue",
+    IntResourceType.pink_hat: "Hats/Pink",
+    IntResourceType.yellow_hat: "Hats/Yellow"
+}
 
 
 class IntHeader:
@@ -82,6 +94,15 @@ class IntChunk:
                 compressed_contents=compressed_contents
             ))
 
+    def extract(self, path: Path):
+        """
+        Extracts this chunk to a folder.
+        """
+        for file in self.files:
+            file_path = path / file.name
+            with open(file_path, "wb") as fp:
+                fp.write(file.compressed_contents)
+
 
 class IntContainer:
     """
@@ -94,3 +115,17 @@ class IntContainer:
         self.chunks: List[IntChunk] = [IntChunk(
             data=chunk_data
         ) for chunk_data in self.data.split(chunk_splitter)[1:-1]]  # remove first and last item.
+
+    def extract(self, path: Path, makedirs: bool = True):
+        """
+        Extracts this .INT to a folder.
+        Each chunk will be a separate subdirectory.
+        """
+        for chunk in self.chunks:
+            chunk_path = path / resource_type_to_path[chunk.header.resource_type]
+            if makedirs:
+                chunk_path.mkdir(
+                    parents=True,
+                    exist_ok=True
+                )
+            chunk.extract(chunk_path)
