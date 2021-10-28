@@ -37,88 +37,16 @@ class IntFileChunk:
 
     def __init__(self, data: bytes):
         self.header: IntFileHeader = IntFileHeader(data[:20])
+        true_info_offset = self.header.info_offset - 4  # the true offset is 4 less than this.
+        true_contents_offset = true_info_offset + self.header.contents_offset  # the contents offset is relative to info
+        true_info_data = data[true_info_offset:true_contents_offset]
+        print(len(true_info_data))
+        true_info_data = true_info_data.strip(b"\x00")
 
-        offsets_data: bytes = data[28:self.header.info_offset]
+        split_position: int = (self.header.file_count * 8)-4  # will contain the position in which the info data changes to
 
-        info_data: bytes = data[self.header.info_offset-4:self.header.info_offset-4 + self.header.contents_offset]
-        contents_data: bytes = data[self.header.info_offset + 4 + self.header.contents_offset:]
-
-        offsets: List[int] = []
-        infos: List[Tuple[int, int]] = []
-
-        for offset_position in range(
-            0,  # start at 0
-            len(offsets_data),  # end at the offset length
-            offsets_size  # split into chunks of 4
-        ):
-            # To ensure we don't mess up the offsets
-            # we'll break when the offset goes *down* from the one we saw last
-            offset: int = int.from_bytes(
-                bytes=offsets_data[offset_position:offset_position + offsets_size],
-                byteorder="little"
-            )
-
-            try:
-                if offset <= offsets[len(offsets)-1]:
-                    # we're past the bounds...
-                    break
-            except IndexError:
-                # catch IndexErrors and drop them
-                pass
-
-            offsets.append(
-                int.from_bytes(
-                    bytes=offsets_data[offset_position:offset_position + offsets_size],
-                    byteorder="little"
-                )
-            )
-
-        final_info_position: int = 0
-        for info_position in range(
-            0,
-            len(info_data),
-            name_offsets_size
-        ):
-            if len(infos) >= len(offsets):
-                # cleanup weird overlap.
-                final_info_position = info_position
-                break
-
-            name_offset: int = int.from_bytes(
-                bytes=info_data[info_position:info_position + offsets_size],
-                byteorder="little"
-            )
-
-            compressed_size: int = int.from_bytes(
-                bytes=info_data[info_position + offsets_size:info_position + (offsets_size * 2)],
-                byteorder="little"
-            )
-
-            try:
-                if name_offset <= infos[len(infos)-1][0]:
-                    # we're past the bounds...
-                    break
-            except IndexError:
-                # catch IndexErrors and drop them
-                pass
-
-            infos.append((name_offset, compressed_size))
-
-        names_data = info_data[final_info_position-8:]
-
-        for i, offset in enumerate(offsets):
-            name_offset, compressed_size = infos[i]
-            name = names_data[name_offset:].split(b"\x00")[0].decode("utf-8")  # split by null for now.
-
-            """
-            print("Name:", name)
-            print("Offset:", offset)
-            print("Name Offset:", name_offset)
-            print("Compressed Size:", compressed_size)
-            """
-
-            with open(rf"J:\Development\PTR2 Modding\Beta Extracted INT\{name}", "wb") as file:
-                file.write(contents_data[offset:compressed_size])
+        file_name_offset_size_data = true_info_data[:split_position]
+        file_name_data = true_info_data[split_position:]
 
 
 class IntFile:
@@ -131,4 +59,4 @@ class IntFile:
         # we split the first item in the split.
         self.chunks: List[IntFileChunk] = [IntFileChunk(
             data=chunk_data
-        ) for chunk_data in self.data.split(chunk_splitter)[1:]]
+        ) for chunk_data in self.data.split(chunk_splitter)[1:-1]]  # remove first and last item.
