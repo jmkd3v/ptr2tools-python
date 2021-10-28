@@ -1,3 +1,4 @@
+import json
 from enum import IntEnum
 from pathlib import Path
 from typing import List, Dict
@@ -94,14 +95,29 @@ class IntChunk:
                 compressed_contents=compressed_contents
             ))
 
-    def extract(self, path: Path):
+    def extract(self, path: Path, generate_metadata: bool = True):
         """
         Extracts this chunk to a folder.
         """
+        file_metadata = []
+
         for file in self.files:
             file_path = path / file.name
             with open(file_path, "wb") as fp:
                 fp.write(file.compressed_contents)
+            file_metadata.append({
+                "name": file.name,
+                "original_size": file.size,
+                "binary_size": len(file.compressed_contents)
+            })
+
+        metadata = {
+            "files": file_metadata,
+            "resource_type": self.header.resource_type.value
+        }
+        metadata_path = path / "parappa.json"
+        with open(metadata_path, "w") as fp:
+            json.dump(metadata, fp, indent=2)
 
 
 class IntContainer:
@@ -116,16 +132,19 @@ class IntContainer:
             data=chunk_data
         ) for chunk_data in self.data.split(chunk_splitter)[1:-1]]  # remove first and last item.
 
-    def extract(self, path: Path, makedirs: bool = True):
+    def extract(self, path: Path, make_directories: bool = True, generate_metadata: bool = True):
         """
         Extracts this .INT to a folder.
         Each chunk will be a separate subdirectory.
         """
         for chunk in self.chunks:
             chunk_path = path / resource_type_to_path[chunk.header.resource_type]
-            if makedirs:
+            if make_directories:
                 chunk_path.mkdir(
                     parents=True,
                     exist_ok=True
                 )
-            chunk.extract(chunk_path)
+            chunk.extract(
+                path=chunk_path,
+                generate_metadata=generate_metadata
+            )
