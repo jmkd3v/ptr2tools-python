@@ -2,6 +2,8 @@ from typing import List
 from enum import IntEnum
 
 chunk_splitter = int.to_bytes(0x44332211, 4, "little")
+offsets_size = 4
+name_offsets_size = 8
 
 
 class IntResourceType(IntEnum):
@@ -19,6 +21,7 @@ class IntFileHeader:
     """
     Represents the .INT file's header.
     """
+
     def __init__(self, data: bytes):
         self.file_count: int = int.from_bytes(bytes=data[:4], byteorder="little")
         self.resource_type: IntResourceType = IntResourceType(int.from_bytes(bytes=data[4:8], byteorder="little"))
@@ -31,16 +34,53 @@ class IntFileChunk:
     """
     Represents a single chunk in an .INT file.
     """
+
     def __init__(self, data: bytes):
         self.header: IntFileHeader = IntFileHeader(data[:20])
-        self.info_data: bytes = data[self.header.info_offset:self.header.info_offset+self.header.contents_offset]
-        self.contents_data: bytes = data[self.header.info_offset+self.header.contents_offset:]
+
+        # the info_offset must be +4 to work with this scheme
+        relative_info_offset = self.header.info_offset + 4
+        offsets_data: bytes = data[28:relative_info_offset]
+        info_data: bytes = data[relative_info_offset:relative_info_offset + self.header.contents_offset]
+        contents_data: bytes = data[relative_info_offset + self.header.contents_offset:]
+
+        offsets: List[int] = []
+
+        for offset_position in range(
+            0,  # start at 0
+            len(offsets_data),  # end at the offset length
+            offsets_size  # split into chunks of 4
+        ):
+            # To ensure we don't mess up the offsets
+            # we'll break when the offset goes *down* from the one we saw last
+            offset: int = int.from_bytes(
+                bytes=offsets_data[offset_position:offset_position + offsets_size],
+                byteorder="little"
+            )
+
+            try:
+                if offset <= offsets[len(offsets)-1]:
+                    # we're past the bounds...
+                    break
+            except IndexError:
+                # catch IndexErrors and drop them
+                pass
+
+            offsets.append(
+                int.from_bytes(
+                    bytes=offsets_data[offset_position:offset_position + offsets_size],
+                    byteorder="little"
+                )
+            )
+
+        print(offsets)
 
 
 class IntFile:
     """
     Represents an .INT file in a PaRappa The Rapper 2 ISO.
     """
+
     def __init__(self, data: bytes):
         self.data: bytes = data
         # we split the first item in the split.
