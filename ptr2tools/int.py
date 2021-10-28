@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 from enum import IntEnum
 
 chunk_splitter = int.to_bytes(0x44332211, 4, "little")
@@ -40,11 +40,12 @@ class IntFileChunk:
 
         # the info_offset must be +4 to work with this scheme
         relative_info_offset = self.header.info_offset + 4
-        offsets_data: bytes = data[28:relative_info_offset]
+        offsets_data: bytes = data[32:relative_info_offset]
         info_data: bytes = data[relative_info_offset:relative_info_offset + self.header.contents_offset]
         contents_data: bytes = data[relative_info_offset + self.header.contents_offset:]
 
         offsets: List[int] = []
+        infos: List[Tuple[int, int]] = []
 
         for offset_position in range(
             0,  # start at 0
@@ -73,7 +74,37 @@ class IntFileChunk:
                 )
             )
 
-        print(offsets)
+        for info_position in range(
+            0,
+            len(info_data),
+            name_offsets_size
+        ):
+            if len(infos) >= len(offsets):
+                # cleanup weird overlap.
+                break
+
+            name_offset: int = int.from_bytes(
+                bytes=info_data[info_position:info_position + offsets_size],
+                byteorder="little"
+            )
+
+            compressed_size: int = int.from_bytes(
+                bytes=info_data[info_position + offsets_size:info_position + (offsets_size * 2)],
+                byteorder="little"
+            )
+
+            try:
+                if name_offset <= infos[len(infos)-1][0]:
+                    # we're past the bounds...
+                    break
+            except IndexError:
+                # catch IndexErrors and drop them
+                pass
+
+            infos.append((name_offset, compressed_size))
+
+        print(len(offsets), offsets)
+        print(len(infos), infos)
 
 
 class IntFile:
