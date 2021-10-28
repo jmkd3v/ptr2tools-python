@@ -38,11 +38,10 @@ class IntFileChunk:
     def __init__(self, data: bytes):
         self.header: IntFileHeader = IntFileHeader(data[:20])
 
-        # the info_offset must be +4 to work with this scheme
-        relative_info_offset = self.header.info_offset + 4
-        offsets_data: bytes = data[32:relative_info_offset]
-        info_data: bytes = data[relative_info_offset:relative_info_offset + self.header.contents_offset]
-        contents_data: bytes = data[relative_info_offset + self.header.contents_offset:]
+        offsets_data: bytes = data[28:self.header.info_offset]
+
+        info_data: bytes = data[self.header.info_offset-4:self.header.info_offset-4 + self.header.contents_offset]
+        contents_data: bytes = data[self.header.info_offset + 4 + self.header.contents_offset:]
 
         offsets: List[int] = []
         infos: List[Tuple[int, int]] = []
@@ -74,6 +73,7 @@ class IntFileChunk:
                 )
             )
 
+        final_info_position: int = 0
         for info_position in range(
             0,
             len(info_data),
@@ -81,6 +81,7 @@ class IntFileChunk:
         ):
             if len(infos) >= len(offsets):
                 # cleanup weird overlap.
+                final_info_position = info_position
                 break
 
             name_offset: int = int.from_bytes(
@@ -103,8 +104,21 @@ class IntFileChunk:
 
             infos.append((name_offset, compressed_size))
 
-        print(len(offsets), offsets)
-        print(len(infos), infos)
+        names_data = info_data[final_info_position-8:]
+
+        for i, offset in enumerate(offsets):
+            name_offset, compressed_size = infos[i]
+            name = names_data[name_offset:].split(b"\x00")[0].decode("utf-8")  # split by null for now.
+
+            """
+            print("Name:", name)
+            print("Offset:", offset)
+            print("Name Offset:", name_offset)
+            print("Compressed Size:", compressed_size)
+            """
+
+            with open(rf"J:\Development\PTR2 Modding\Beta Extracted INT\{name}", "wb") as file:
+                file.write(contents_data[offset:compressed_size])
 
 
 class IntFile:
