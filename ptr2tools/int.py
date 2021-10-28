@@ -105,19 +105,22 @@ class IntChunk:
             file_path = path / file.name
             with open(file_path, "wb") as fp:
                 fp.write(file.compressed_contents)
-            file_metadata.append({
-                "name": file.name,
-                "original_size": file.size,
-                "binary_size": len(file.compressed_contents)
-            })
 
-        metadata = {
-            "files": file_metadata,
-            "resource_type": self.header.resource_type.value
-        }
-        metadata_path = path / "parappa.json"
-        with open(metadata_path, "w") as fp:
-            json.dump(metadata, fp, indent=2)
+            if generate_metadata:
+                file_metadata.append({
+                    "name": file.name,
+                    "original_size": file.size,
+                    "binary_size": len(file.compressed_contents)
+                })
+
+        if generate_metadata:
+            metadata = {
+                "files": file_metadata,
+                "resource_type": self.header.resource_type.value
+            }
+            metadata_path = path / "parappa.json"
+            with open(metadata_path, "w") as fp:
+                json.dump(metadata, fp, indent=2)
 
 
 class IntContainer:
