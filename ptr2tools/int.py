@@ -86,7 +86,7 @@ class IntChunk:
             name_offset = int.from_bytes(bytes=file_name_size_data[fn_offset:fn_offset+4], byteorder="little")
             file_name: str = file_name_data[name_offset:].split(b"\x00")[0].decode("utf-8")
             file_size: int = int.from_bytes(bytes=file_name_size_data[fn_offset+4:fn_offset+8], byteorder="little")
-            compressed_contents: bytes = file_contents_data[content_offset:file_size]
+            compressed_contents: bytes = file_contents_data[content_offset:content_offset+file_size]
 
             self.files.append(IntFile(
                 number=file_number,
