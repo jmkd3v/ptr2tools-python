@@ -1,22 +1,22 @@
 from typing import BinaryIO
-from .int import IntFile
+from .int import IntContainer
 
 
-def get_int_from_bytes(data: bytes) -> IntFile:
+def get_int_from_bytes(data: bytes) -> IntContainer:
     """
     Gets an IntFile from the passed bytes.
     """
-    return IntFile(data)
+    return IntContainer(data)
 
 
-def get_int_from_file(fp: BinaryIO) -> IntFile:
+def get_int_from_file(fp: BinaryIO) -> IntContainer:
     """
     Gets an IntFile from a file stream.
     """
-    return IntFile(fp.read())
+    return IntContainer(fp.read())
 
 
-def get_int_from_path(path: str) -> IntFile:
+def get_int_from_path(path: str) -> IntContainer:
     """
     Gets an IntFile from a file path.
     """

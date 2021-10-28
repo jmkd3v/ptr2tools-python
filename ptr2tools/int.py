@@ -1,5 +1,6 @@
-from typing import List, Tuple
 from enum import IntEnum
+from typing import List
+from dataclasses import dataclass
 
 chunk_splitter = int.to_bytes(0x44332211, 4, "little")
 offsets_size = 4
@@ -17,7 +18,7 @@ class IntResourceType(IntEnum):
     yellow_hat = 7
 
 
-class IntFileHeader:
+class IntHeader:
     """
     Represents the .INT file's header.
     """
@@ -30,13 +31,25 @@ class IntFileHeader:
         self.compressed_size: int = int.from_bytes(bytes=data[16:20], byteorder="little")
 
 
-class IntFileChunk:
+@dataclass()
+class IntFile:
+    """
+    Represents a file inside of an .INT file.
+    """
+    number: int
+    name: str
+    size: int
+    compressed_contents: bytes
+
+
+class IntChunk:
     """
     Represents a single chunk in an .INT file.
     """
 
     def __init__(self, data: bytes):
-        self.header: IntFileHeader = IntFileHeader(data[:20])
+        self.header: IntHeader = IntHeader(data[:20])
+        self.files: List[IntFile] = []
 
         true_info_offset = self.header.info_offset - 4  # the true offset is 4 less than this.
         true_contents_offset = true_info_offset + self.header.contents_offset  # the contents offset is relative to info
@@ -50,14 +63,27 @@ class IntFileChunk:
 
         file_name_data = true_info_data[split_position:]
         file_offset_data = data[28:true_info_offset]
+        file_contents_data = data[true_contents_offset:]
 
-        for i in range(0, len(file_name_size_data), 8):
-            name_offset = int.from_bytes(bytes=file_name_size_data[i:i+4], byteorder="little")
+        for file_number in range(0, self.header.file_count):
+            f_offset = file_number * 4
+            fn_offset = file_number * 8  # offset for the file name offset + size data
+
+            content_offset = int.from_bytes(bytes=file_offset_data[f_offset:f_offset+4], byteorder="little")
+            name_offset = int.from_bytes(bytes=file_name_size_data[fn_offset:fn_offset+4], byteorder="little")
             file_name: str = file_name_data[name_offset:].split(b"\x00")[0].decode("utf-8")
-            file_size: int = int.from_bytes(bytes=file_name_size_data[i+4:i+8], byteorder="little")
+            file_size: int = int.from_bytes(bytes=file_name_size_data[fn_offset+4:fn_offset+8], byteorder="little")
+            compressed_contents: bytes = file_contents_data[content_offset:file_size]
+
+            self.files.append(IntFile(
+                number=file_number,
+                name=file_name,
+                size=file_size,
+                compressed_contents=compressed_contents
+            ))
 
 
-class IntFile:
+class IntContainer:
     """
     Represents an .INT file in a PaRappa The Rapper 2 ISO.
     """
@@ -65,6 +91,6 @@ class IntFile:
     def __init__(self, data: bytes):
         self.data: bytes = data
         # we split the first item in the split.
-        self.chunks: List[IntFileChunk] = [IntFileChunk(
+        self.chunks: List[IntChunk] = [IntChunk(
             data=chunk_data
         ) for chunk_data in self.data.split(chunk_splitter)[1:-1]]  # remove first and last item.
