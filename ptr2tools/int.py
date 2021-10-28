@@ -37,16 +37,24 @@ class IntFileChunk:
 
     def __init__(self, data: bytes):
         self.header: IntFileHeader = IntFileHeader(data[:20])
+
         true_info_offset = self.header.info_offset - 4  # the true offset is 4 less than this.
         true_contents_offset = true_info_offset + self.header.contents_offset  # the contents offset is relative to info
         true_info_data = data[true_info_offset:true_contents_offset]
-        print(len(true_info_data))
-        true_info_data = true_info_data.strip(b"\x00")
 
-        split_position: int = (self.header.file_count * 8)-4  # will contain the position in which the info data changes to
+        # because the data is relative to the file count we can just multiply by 8 to get the proper spot
+        # I have to subtract by 4 for some reason
+        split_position: int = (self.header.file_count * 8)
 
-        file_name_offset_size_data = true_info_data[:split_position]
+        file_name_size_data = true_info_data[:split_position]
+
         file_name_data = true_info_data[split_position:]
+        file_offset_data = data[28:true_info_offset]
+
+        for i in range(0, len(file_name_size_data), 8):
+            name_offset = int.from_bytes(bytes=file_name_size_data[i:i+4], byteorder="little")
+            file_name: str = file_name_data[name_offset:].split(b"\x00")[0].decode("utf-8")
+            file_size: int = int.from_bytes(bytes=file_name_size_data[i+4:i+8], byteorder="little")
 
 
 class IntFile:
