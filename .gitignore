@@ -115,3 +115,5 @@ dmypy.json
 
 # IDEA folder
 .idea/
+
+_tests/
