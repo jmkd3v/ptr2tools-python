@@ -1,9 +1,11 @@
 import json
-from io import BytesIO
+from dataclasses import dataclass
 from enum import IntEnum
+from io import BytesIO
 from pathlib import Path
 from typing import List, Dict, Optional, BinaryIO
-from dataclasses import dataclass
+
+from .lzss import decode
 
 
 class IntResourceType(IntEnum):
@@ -93,9 +95,9 @@ class IntChunk:
         # now we want to read the file's filenames, which are after this data and before the contents offset
         # so we can just subtract the file_count * 8 from the contents offset to get the amount of data we want to read
         # plus a ton of extra null bytes, which we strip with .strip(b"\x00")
-        file_names = stream.read(self.header.relative_contents_offset - (self.header.file_count * 8))\
-            .strip(b"\x00")\
-            .decode("ascii")\
+        file_names = stream.read(self.header.relative_contents_offset - (self.header.file_count * 8)) \
+            .strip(b"\x00") \
+            .decode("ascii") \
             .split("\x00")
 
         for file_number, file in enumerate(self.files):
@@ -103,6 +105,22 @@ class IntChunk:
 
         # we are now at the contents offset, use tell to get that offset
         self.compressed_contents: bytes = stream.read(self.header.compressed_size)
+        assert len(self.compressed_contents) == self.header.compressed_size, "Compressed contents too small"
+
+    def decompress(self):
+        with BytesIO() as input_file:
+            input_file.write(self.compressed_contents)
+            input_file.seek(0)
+            with BytesIO() as output_file:
+                decode(
+                    infile=input_file,
+                    outfile=output_file,
+                    EI=12,
+                    EJ=4,
+                    P=2
+                )
+                output_file.seek(0)
+                return output_file.read()
 
     def extract(self, path: Path, generate_metadata: bool = True):
         """
