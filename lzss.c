@@ -1,9 +1,21 @@
 /* Code is partially derived from Haruhiko Okumura (4/6/1989), in which they express the freedom to use, modify, and distribute their "LZSS.C" source code. */
 
+#ifdef _WIN32
+#define EXPORT __declspec(dllexport)
+#else
+#define EXPORT
+#endif
+
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "lzss.h"
+
+// GROSS HACK TO GET THIS TO WORK
+struct PyObject;
+typedef struct PyObject PyObject;
+PyObject* EXPORT PyInit_lzss(void) { return NULL; };
+
 
 typedef uint8_t byte;
 
@@ -117,7 +129,7 @@ static inline void delete_node(struct lzss_t *state, int p) {
 #define readsrc() if(src >= srcend) { break; } c = *src++;
 #define writedst(x) if(NULL != dst) { *dst++ = (x); }
 
-static int encode(struct lzss_t *state, int EJ, const uint8_t *src, int srclen, uint8_t *dst) {
+static int EXPORT encode(struct lzss_t *state, int EJ, const uint8_t *src, int srclen, uint8_t *dst) {
   int i,c,len,r,s,lastmatchlen,codebufind;
   uint8_t codebuf[33];
   uint8_t mask;
@@ -193,7 +205,7 @@ static int encode(struct lzss_t *state, int EJ, const uint8_t *src, int srclen, 
   return dstlen;
 }
 
-int lzss_compress(int EI, int EJ, int P, int rless, uint8_t *buffer, const uint8_t *src, int srclen, uint8_t *dst) {
+int EXPORT lzss_compress(int EI, int EJ, int P, int rless, uint8_t *buffer, const uint8_t *src, int srclen, uint8_t *dst) {
   struct lzss_t lstate;
   struct lzss_t *state = &lstate;
   int dstlen;
@@ -218,7 +230,7 @@ int lzss_compress(int EI, int EJ, int P, int rless, uint8_t *buffer, const uint8
 #define readsrc(x) if(src >= srcend) { break; } (x) = *src++;
 #define writedst(x) if(dst >= dstend) { break; } *dst++ = (x);
 
-void lzss_decompress(int EI, int EJ, int P, int rless, byte *buffer, const byte *srcstart, int srclen, byte *dststart, int dstlen) {
+void EXPORT lzss_decompress(int EI, int EJ, int P, int rless, byte *buffer, const byte *srcstart, int srclen, byte *dststart, int dstlen) {
   int N = (1 << EI);
   int F = (1 << EJ);
 
