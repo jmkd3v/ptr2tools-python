@@ -102,11 +102,6 @@ class IntChunk:
                 contents=uncompressed_stream.read(file_length)
             ))
 
-        with open(f"./{self.type.name}.bin", "wb") as file:
-            uncompressed_stream.seek(0)
-            extra_data = uncompressed_stream.read()
-            file.write(extra_data)
-
 
 class IntContainer:
     def __init__(self, stream: BinaryIO):
