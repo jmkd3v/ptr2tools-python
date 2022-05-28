@@ -1,14 +1,15 @@
-import json
+import io
+from pathlib import Path
 from dataclasses import dataclass
 from enum import IntEnum
-from io import BytesIO
-from pathlib import Path
 from typing import List, Dict, Optional, BinaryIO
 
-from .lzss import decode
+import ctypes
+from ctypes import cdll
+lzss = cdll.LoadLibrary(str(Path(__file__).parent / "lzss.so"))
 
 
-class IntResourceType(IntEnum):
+class ChunkType(IntEnum):
     end = 0
     textures = 1
     sounds = 2
@@ -19,164 +20,102 @@ class IntResourceType(IntEnum):
     yellow_hat = 7
 
 
-resource_type_to_path: Dict[IntResourceType, str] = {
-    IntResourceType.textures: "Textures",
-    IntResourceType.sounds: "Sounds",
-    IntResourceType.stage: "Props",
-    IntResourceType.red_hat: "Hats/Red",
-    IntResourceType.blue_hat: "Hats/Blue",
-    IntResourceType.pink_hat: "Hats/Pink",
-    IntResourceType.yellow_hat: "Hats/Yellow"
-}
-
-
-class IntHeader:
-    """
-    Represents the .INT file's header.
-    """
-
-    def __init__(self, stream: BinaryIO):
-        self.files: List[IntFile] = []
-
-        magic = int.from_bytes(bytes=stream.read(4), byteorder="little")
-        assert magic == 0x44332211, f"magic must be 0x44332211, got {hex(magic)}"
-
-        self.magic: int = magic
-        self.file_count: int = int.from_bytes(bytes=stream.read(4), byteorder="little")
-        self.resource_type: IntResourceType = IntResourceType(int.from_bytes(bytes=stream.read(4), byteorder="little"))
-        self.info_offset: int = int.from_bytes(bytes=stream.read(4), byteorder="little")
-        self.relative_contents_offset: int = int.from_bytes(bytes=stream.read(4), byteorder="little")
-        self.compressed_size: int = int.from_bytes(bytes=stream.read(4), byteorder="little")
-
-        # there are 8 bytes of null data
-        assert stream.read(8) == b'\x00' * 8
-
-        print(self.file_count, self.resource_type, self.info_offset, self.relative_contents_offset)
-
-
-@dataclass()
+@dataclass
 class IntFile:
-    """
-    Represents a file inside of an .INT file.
-    """
-
-    name: Optional[str]
-    size: Optional[int]
-    offset: int
+    name: str
+    contents: bytes
 
 
 class IntChunk:
-    """
-    Represents a single chunk in an .INT file.
-    """
-
     def __init__(self, stream: BinaryIO):
-        start_position = stream.tell()
-        self.files: List[IntFile] = []
-        self.header: IntHeader = IntHeader(stream)
+        # The offsets are relative to the start of the chunk, so I do a tell here to determine where that is
+        chunk_offset = stream.tell()
 
-        for file_number in range(self.header.file_count):
+        if stream.read(4) != b"\x11\x22\x33\x44":
+            raise ValueError("magic is not present")
+
+        self.file_count = int.from_bytes(stream.read(4), byteorder="little")
+        self.type = ChunkType(int.from_bytes(stream.read(4), byteorder="little"))
+        self.files: List[IntFile] = []
+
+        if self.type == ChunkType.end:
+            return
+
+        info_offset = int.from_bytes(stream.read(4), byteorder="little")
+        data_offset = int.from_bytes(stream.read(4), byteorder="little")
+        data_size = int.from_bytes(stream.read(4), byteorder="little")
+
+        if stream.read(8) != b"\x00" * 8:
+            raise ValueError("nul bytes missing")
+
+        file_offsets = []
+        for file_index in range(self.file_count):  # i think there is an extra offset for some reason
+            file_offsets.append(int.from_bytes(stream.read(4), byteorder="little"))
+
+        stream.seek(chunk_offset + info_offset)  # not exactly sure why the +4 here but whatever?
+
+        # list of name offset and compressed file size
+        file_name_offsets = []
+        file_lengths = []
+        for file_index in range(self.file_count):
+            file_name_offsets.append(int.from_bytes(stream.read(4), byteorder="little"))
+            file_lengths.append(int.from_bytes(stream.read(4), byteorder="little"))
+
+        # now we compile this all together
+
+        # reading null-terminated strings in python is a PITA and can be slow
+        # i cheat around it by just reading everything until the file contents start and then just splitting by NUL
+        name_data = stream.read((
+                (chunk_offset + data_offset + info_offset) - stream.tell()  # data offset is relative to info offset
+        )).strip(b"\x00").decode("ascii")
+        file_names = name_data.split("\x00")
+
+        # now we are right at the start of the data, so we can just read data_size bytes
+        uncompressed_size = int.from_bytes(stream.read(4), byteorder="little")
+        compressed_size = int.from_bytes(stream.read(4), byteorder="little")
+
+        misc_buffer = ctypes.create_string_buffer(0x1000)
+
+        compressed_buffer = ctypes.create_string_buffer(stream.read(data_size - 8))
+        uncompressed_buffer = ctypes.create_string_buffer(uncompressed_size)
+
+        lzss.lzss_decompress(
+            12, 4, 2, 2,
+            misc_buffer,
+            compressed_buffer,
+            compressed_size,
+            uncompressed_buffer,
+            uncompressed_size,
+        )
+
+        uncompressed_stream = io.BytesIO(uncompressed_buffer.raw)
+
+        for file_index in range(self.file_count):
+            file_name = file_names[file_index]
+            file_offset = file_offsets[file_index]
+            file_length = file_lengths[file_index]
+
+            uncompressed_stream.seek(file_offset)
+
             self.files.append(IntFile(
-                offset=int.from_bytes(bytes=stream.read(4), byteorder="little"),
-                name=None,
-                size=None
+                name=file_name,
+                contents=uncompressed_stream.read(file_length)
             ))
 
-        stream.seek(start_position + self.header.info_offset)
-
-        for file_number in range(self.header.file_count):
-            # this would be the name offset but it sucks so we won't use
-            stream.read(4)
-
-            self.files[file_number].size = int.from_bytes(bytes=stream.read(4), byteorder="little")
-
-        # so the contents offset is the point where the file contents start, relative to the info offset
-        # we seeked to the info offset and then read 8 bytes for each file (name offset and file size for each)
-        # now we want to read the file's filenames, which are after this data and before the contents offset
-        # so we can just subtract the file_count * 8 from the contents offset to get the amount of data we want to read
-        # plus a ton of extra null bytes, which we strip with .strip(b"\x00")
-        file_names = stream.read(self.header.relative_contents_offset - (self.header.file_count * 8)) \
-            .strip(b"\x00") \
-            .decode("ascii") \
-            .split("\x00")
-
-        for file_number, file in enumerate(self.files):
-            file.name = file_names[file_number]
-
-        # we are now at the contents offset, use tell to get that offset
-        self.compressed_contents: bytes = stream.read(self.header.compressed_size)
-        assert len(self.compressed_contents) == self.header.compressed_size, "Compressed contents too small"
-
-    def decompress(self):
-        with BytesIO() as input_file:
-            input_file.write(self.compressed_contents)
-            input_file.seek(0)
-            with BytesIO() as output_file:
-                decode(
-                    infile=input_file,
-                    outfile=output_file,
-                    EI=12,
-                    EJ=4,
-                    P=2
-                )
-                output_file.seek(0)
-                return output_file.read()
-
-    def extract(self, path: Path, generate_metadata: bool = True):
-        """
-        Extracts this chunk to a folder.
-        """
-        file_metadata = []
-
-        for file in self.files:
-            file_path = path / file.name
-            with open(file_path, "wb") as fp:
-                fp.write(file.contents)
-
-            if generate_metadata:
-                file_metadata.append({
-                    "name": file.name,
-                    "original_size": file.size,
-                    "binary_size": len(file.contents)
-                })
-
-        if generate_metadata:
-            metadata = {
-                "files": file_metadata,
-                "resource_type": self.header.resource_type.value
-            }
-            metadata_path = path / "parappa.json"
-            with open(metadata_path, "w") as fp:
-                json.dump(metadata, fp, indent=2)
+        with open(f"./{self.type.name}.bin", "wb") as file:
+            uncompressed_stream.seek(0)
+            extra_data = uncompressed_stream.read()
+            file.write(extra_data)
 
 
 class IntContainer:
-    """
-    Represents an .INT file in a PaRappa The Rapper 2 ISO.
-    """
-
     def __init__(self, stream: BinaryIO):
-        self.chunks: List[IntChunk] = []
+        self.chunks = []
 
         while True:
-            chunk = IntChunk(stream=stream)
-            self.chunks.append(chunk)
-            if chunk.header.resource_type == IntResourceType.end:
+            chunk = IntChunk(stream)
+
+            if chunk.type == ChunkType.end:
                 break
 
-    def extract(self, path: Path, make_directories: bool = True, generate_metadata: bool = True):
-        """
-        Extracts this .INT to a folder.
-        Each chunk will be a separate subdirectory.
-        """
-        for chunk in self.chunks:
-            chunk_path = path / resource_type_to_path[chunk.header.resource_type]
-            if make_directories:
-                chunk_path.mkdir(
-                    parents=True,
-                    exist_ok=True
-                )
-            chunk.extract(
-                path=chunk_path,
-                generate_metadata=generate_metadata
-            )
+            self.chunks.append(chunk)

@@ -117,3 +117,5 @@ dmypy.json
 .idea/
 
 jmk_tests/
+.DS_Store
+*.dylib
