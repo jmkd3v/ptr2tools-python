@@ -1,4 +1,5 @@
 import io
+import sysconfig
 from pathlib import Path
 from dataclasses import dataclass
 from enum import IntEnum
@@ -6,7 +7,8 @@ from typing import List, Dict, Optional, BinaryIO
 
 import ctypes
 from ctypes import cdll
-lzss = cdll.LoadLibrary(str(Path(__file__).parent / "lzss.so"))
+EXT_SUFFIX = sysconfig.get_config_var("EXT_SUFFIX")
+lzss = cdll.LoadLibrary(str(Path(__file__).parent.parent / f"lzss{EXT_SUFFIX}"))
 
 
 class ChunkType(IntEnum):
