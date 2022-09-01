@@ -57,7 +57,7 @@ class VagFile:
         stream.write(b"\x00" * 28)
         stream.write(self.data)
 
-    def to_sample_stream(self):
+    def dump_samples(self):
         hist_1, hist_2 = 0.0, 0.0
 
         in_stream = io.BytesIO(self.data)
@@ -111,4 +111,4 @@ class VagFile:
             wav_file.setnchannels(1)
             wav_file.setsampwidth(2)  # 16-bit, 2 byte
             wav_file.setframerate(self.sample_rate)
-            wav_file.writeframes(self.to_sample_stream().read())
+            wav_file.writeframes(self.dump_samples().read())
