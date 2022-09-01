@@ -7,11 +7,11 @@ from dataclasses import dataclass, field
 VAG_SAMPLE_BYTES = 14
 VAG_SAMPLE_NIBBLE = VAG_SAMPLE_BYTES * 2
 VAG_LUT_DECODER = [
-    (0.0,           0.0),
-    (60.0 / 64.0,   0.0),
-    (115.0 / 64.0,  -52.0 / 64.0),
-    (98.0 / 64.0,   -55.0 / 64.0),
-    (122.0 / 64.0,  -60.0 / 64.0)
+    (0, 0),
+    (60 / 64, 0),
+    (115 / 64, -52 / 64),
+    (98 / 64, -55 / 64),
+    (122 / 64, -60 / 64)
 ]
 
 
